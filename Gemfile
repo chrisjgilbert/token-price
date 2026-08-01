@@ -74,7 +74,7 @@ gem "rss"
 gem "bcrypt", "~> 3.1"
 
 # Error monitoring and logging
-gem "honeybadger", "~> 5.0"
+gem "honeybadger", "~> 6.9"
 
 # In-app dashboard for Active Job / Solid Queue (mounted under /admin/jobs)
 gem "mission_control-jobs"
