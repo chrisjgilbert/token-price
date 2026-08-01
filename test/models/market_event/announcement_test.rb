@@ -119,6 +119,34 @@ class MarketEvent::AnnouncementTest < ActiveSupport::TestCase
     assert_not_includes text, event.note
   end
 
+  test "a so_what too long for a post is cut on a word boundary, never mid-word" do
+    # A so_what may run to SO_WHAT_LIMIT, well past what's left of BlueSky's 300
+    # after the title and link — so this path truncates on nearly every post.
+    event = published_event
+    event.update!(so_what: "Terra's blended rate now works out to $14 per million tokens " \
+                           "($2 in / $12 out), which puts it below Anthropic's mid-tier Claude " \
+                           "Sonnet 4.6, priced at $3 per million input tokens and $15 per million " \
+                           "output tokens, so any routing logic picking models on cost-per-token " \
+                           "alone now favors Terra over Sonnet by a real margin.")
+    posts = []
+    stub_post(BlueskyClient, capture: posts) do
+      stub_post(MastodonClient, capture: posts) do
+        MarketEvent::Announcement.new(event).run
+      end
+    end
+
+    text = posts.first
+    assert_operator text.length, :<=, 300
+    assert text.end_with?("https://tokenprice.fyi/events")
+    assert_includes text, event.title
+    # The cut lands after a whole word: the character before the ellipsis is not
+    # mid-word, i.e. the truncated body ends "… by a real" not "… by a real marg".
+    body = text.delete_suffix("\n\nhttps://tokenprice.fyi/events")
+    assert body.end_with?("…"), "expected an ellipsis on a truncated blurb"
+    assert_includes event.so_what, body.delete_suffix("…").split("\n\n").last.strip,
+      "the kept prefix should be a verbatim word-boundary prefix of the so_what"
+  end
+
   test "an overlong note is truncated but the link is preserved" do
     event = MarketEvent.create!(
       title: "Big pricing shift", note: "x" * 500,

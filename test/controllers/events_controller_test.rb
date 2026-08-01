@@ -9,16 +9,7 @@ class EventsControllerTest < ActionDispatch::IntegrationTest
     assert_select "h1", /Market events/
   end
 
-  test "a native-priced model's launch entry shows its price headline, not an empty token tag" do
-    # Give a native-priced (per-image) model a release date so it appears as a
-    # launch. Its price tag must read the native headline, not a dash I/O tag.
-    ai_models(:image_priced).update!(released_on: Date.new(2026, 7, 1))
-    get events_url
-    assert_response :success
-    assert_select ".ev-tag", text: %r{\$0\.04 / image}
-  end
-
-  test "lists curated market events and model launches" do
+  test "lists curated market events" do
     # Dated today so it lands on the first page regardless of how many events
     # the catalog accumulates ahead of it.
     MarketEvent.create!(title: "The DeepSeek moment", event_date: Date.current,
@@ -26,17 +17,29 @@ class EventsControllerTest < ActionDispatch::IntegrationTest
 
     get events_url
     assert_response :success
-    # A curated market event...
     assert_select ".ev-title", text: /The DeepSeek moment/
-    # ...and a model launch (launch titles link to the model).
-    assert_select ".ev-title a", text: /Claude Opus 4.8 released/
+    assert_select ".ev-note", text: /Markets jolt./
+  end
+
+  test "a released model is not an event — the timeline is market events only" do
+    ai_models(:opus).update!(released_on: Date.current)
+    MarketEvent.create!(title: "A curated event", event_date: Date.current,
+                        kind: "market", status: "published")
+
+    get events_url
+    assert_response :success
+    assert_select ".ev-title", text: /A curated event/
+    assert_select ".ev-title", text: /released/, count: 0
   end
 
   test "orders year groups and the events within them newest-first" do
-    # A market event mixed in among the 2026 launches, so within-year ordering
-    # is exercised across both kinds, not just at year boundaries.
-    MarketEvent.create!(title: "Mid-year milestone", event_date: Date.new(2026, 1, 15),
-                        kind: "market", status: "published")
+    # Two per year so within-year ordering is exercised, not just the year
+    # boundary.
+    [ Date.new(2026, 6, 30), Date.new(2026, 1, 15),
+      Date.new(2025, 11, 24), Date.new(2025, 2, 3) ].each_with_index do |date, i|
+      MarketEvent.create!(title: "Milestone #{i}", event_date: date,
+                          kind: "market", status: "published")
+    end
 
     get events_url
     assert_response :success
@@ -52,21 +55,14 @@ class EventsControllerTest < ActionDispatch::IntegrationTest
     assert_equal dates.sort.reverse, dates, "events should render newest-first by date"
   end
 
-  test "never renders price-change rows, even for a model with a tracked reprice" do
-    get events_url
-    assert_response :success
+  test "an old ?kind= link degrades gracefully to the full timeline" do
+    MarketEvent.create!(title: "Still listed", event_date: Date.current,
+                        kind: "market", status: "published")
 
-    # deepseek_v4 has a 75% cut in the fixtures — the exact case that used to
-    # surface as a reprice row. Price changes are no longer events.
-    assert_select ".ev-item[data-kind=reprice]", count: 0
-  end
-
-  test "an old ?kind=reprice link degrades gracefully to the unfiltered timeline" do
-    get events_url(kind: "reprice")
+    get events_url(kind: "launch")
     assert_response :success
-    # "reprice" isn't a recognized filter anymore, so it behaves like no filter.
-    assert_select ".tp-seg a.on[data-kind=all]"
-    assert_select ".ev-item[data-kind=launch]", minimum: 1
+    # There is no kind filter anymore, so the param is simply ignored.
+    assert_select ".ev-title", text: /Still listed/
   end
 
   test "excludes draft market events" do
@@ -79,14 +75,11 @@ class EventsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".ev-title", text: /Unpublished draft event/, count: 0
   end
 
-  test "renders a kind filter linking to each server-side view" do
+  test "renders no kind filter — there is only one kind of event left" do
     get events_url
     assert_response :success
-    assert_select ".tp-seg a[data-kind=all][href=?]", events_path
-    assert_select ".tp-seg a[data-kind=market][href=?]", events_path(kind: "market")
-    assert_select ".tp-seg a[data-kind=launch][href=?]", events_path(kind: "launch")
-    # No filter active → the "All" tab is the selected one.
-    assert_select ".tp-seg a.on[data-kind=all]"
+    assert_select ".events-toolbar", count: 0
+    assert_select ".tp-seg", count: 0
   end
 
   test "caps the first page and offers a load-more sentinel when more remain" do
@@ -108,6 +101,42 @@ class EventsControllerTest < ActionDispatch::IntegrationTest
       "page two (HTML) should include page one's events plus the next batch"
   end
 
+  test "paging is stable across a block of events sharing a date and a title" do
+    # Neither event_date nor title is unique, so id is what makes the sort
+    # total. Without it an unstable tie could show an event on both pages or on
+    # neither. Every event here shares one date AND one title.
+    (PER_PAGE + 5).times do
+      MarketEvent.create!(title: "Same-day event", event_date: Date.current,
+                          kind: "market", status: "published")
+    end
+
+    get events_url
+    page_one_ids = css_select(".ev-item").size
+    get events_url(page: 2), as: :turbo_stream
+    page_two_ids = css_select(".ev-item").size
+
+    assert_equal PER_PAGE, page_one_ids
+    assert_equal 5, page_two_ids, "every event should appear exactly once across the two pages"
+  end
+
+  test "paging is stable across a block of same-date events" do
+    # A date tie with no secondary sort key is DB-dependent, which could show an
+    # event on both pages or on neither. Every event here shares one date.
+    (PER_PAGE + 5).times do |i|
+      MarketEvent.create!(title: "Same-day event #{i}", event_date: Date.current,
+                          kind: "market", status: "published")
+    end
+
+    get events_url
+    page_one = css_select(".ev-title").map { |el| el.text.strip }
+    get events_url(page: 2), as: :turbo_stream
+    page_two = css_select(".ev-title").map { |el| el.text.strip }
+
+    assert_equal PER_PAGE, page_one.size
+    assert_empty page_one & page_two, "no event should appear on both pages"
+    assert_equal (page_one + page_two).uniq.size, page_one.size + page_two.size
+  end
+
   test "a turbo-stream request appends only the requested page" do
     seed_market_events(PER_PAGE + 5)
 
@@ -122,15 +151,9 @@ class EventsControllerTest < ActionDispatch::IntegrationTest
     assert_operator appended, :<=, PER_PAGE
   end
 
-  test "the kind filter restricts the timeline server-side" do
-    get events_url(kind: "launch")
-    assert_response :success
-    assert_select ".tp-seg a.on[data-kind=launch]"
-    assert_operator css_select(".ev-item[data-kind=launch]").size, :>, 0
-    assert_select ".ev-item[data-kind=market]", count: 0
-  end
-
   test "exhausting the timeline renders an end cap instead of a sentinel" do
+    seed_market_events(3)
+
     get events_url(page: 999)
     assert_response :success
     assert_select ".ev-sentinel-end"

@@ -115,13 +115,17 @@ class ModelsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "hero renders a mini-timeline of several recent events, not just one" do
+    3.times do |i|
+      MarketEvent.create!(title: "Event #{i}", event_date: Date.current - i,
+                          kind: "market", status: "published")
+    end
+
     get root_url
     assert_response :success
-    # Several fixture models have distinct released_on dates, so the hero's
-    # mini-timeline should surface more than a single launch chip — no
-    # one-per-kind cap picking a single "winner".
-    assert_select ".hero-card .hero-card-kind-chip.launch" do |chips|
-      assert_operator chips.size, :>, 1
+    # The headline event plus a row per runner-up, so the hero doesn't have to
+    # pick a single "winner" among recent events.
+    assert_select ".hero-card .hero-card-timeline-row" do |rows|
+      assert_operator rows.size, :>, 1
     end
   end
 
@@ -136,22 +140,30 @@ class ModelsControllerTest < ActionDispatch::IntegrationTest
     assert_select ".hero-card a.tp-btn[href=?]", events_path, text: /View timeline/
   end
 
-  test "hero shows only market events and launches — no reprice chips, and there is no ticker" do
-    # Without a MarketEvent in the DB this test's market-chip check would pass
-    # trivially off launch chips alone — no fixture file exists for the table,
-    # so create one directly to exercise the market side of the assertion.
+  test "hero shows market events only — no model releases, and there is no ticker" do
+    # No fixture file exists for the market_events table, so create one directly.
     MarketEvent.create!(title: "Test market event", event_date: Date.current,
                         kind: "market", status: "published", note: "A note.")
+    ai_models(:opus).update!(released_on: Date.current)
 
     get root_url
     assert_response :success
-    # The hero card focuses on market events and model releases; price changes
-    # are no longer surfaced as events anywhere, so no reprice chips and no
-    # ticker banner.
-    assert_select ".hero-card .hero-card-kind-chip.reprice", count: 0
+    assert_select ".hero-card .hero-card-title", text: /Test market event/
+    # A model release is not an event: neither its title nor a link to it.
+    assert_select ".hero-card", text: /released/, count: 0
+    assert_select ".hero-card a[href=?]", model_path(ai_models(:opus)), count: 0
+    # Price changes aren't surfaced as events anywhere, so no ticker banner.
     assert_select ".tp-ticker", count: 0
-    assert_select ".hero-card .hero-card-kind-chip.launch"
-    assert_select ".hero-card .hero-card-kind-chip.market"
+  end
+
+  test "hero renders nothing but the empty card when there are no market events" do
+    MarketEvent.delete_all
+
+    get root_url
+    assert_response :success
+    assert_select ".hero-card"
+    assert_select ".hero-card .hero-card-headline", count: 0
+    assert_select ".hero-card a.tp-btn[href=?]", events_path
   end
 
   test "the hero (and its price-change feed) is skipped on Turbo Frame refreshes" do

@@ -225,50 +225,11 @@
     line-height: 1.2;
     margin-bottom: 8px;
   }
-  .hero-card-title a {
-    color: inherit;
-    text-decoration: none;
-    transition: color var(--transition-fast, .15s) var(--ease-default);
-  }
-  .hero-card-title a:hover {
-    color: var(--color-indigo-300, #a5b4fc);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-
-  .hero-card-kind-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 10px;
-    border-radius: 999px;
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: .01em;
-    margin-bottom: 8px;
-  }
-  .hero-card-kind-chip.launch {
-    background: rgba(16,185,129,.15);
-    color: #6ee7b7;
-    border: 1px solid rgba(16,185,129,.25);
-  }
-  .hero-card-kind-chip.market {
-    background: rgba(244,63,94,.12);
-    color: #fda4af;
-    border: 1px solid rgba(244,63,94,.22);
-  }
-
   .hero-card-date {
     font-family: var(--font-mono);
     font-size: 12px;
     color: rgba(148,163,184,.8);
     margin-bottom: 8px;
-  }
-  .hero-card-desc {
-    font-size: 13.5px;
-    color: rgba(226,232,240,.9);
-    line-height: 1.5;
-    margin-bottom: 10px;
   }
   .hero-card-note {
     font-size: 13.5px;
@@ -284,25 +245,9 @@
     border-left: 2px solid rgba(244,63,94,.7);
     margin-bottom: 12px;
   }
-  .hero-card-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    margin-top: 10px;
-  }
-  .hero-card-chip {
-    padding: 4px 10px;
-    border-radius: 999px;
-    font-size: 12px;
-    font-weight: 600;
-    background: rgba(255,255,255,.07);
-    border: 1px solid rgba(255,255,255,.12);
-    color: rgba(203,213,225,.9);
-  }
-
   /* Mini-timeline rows below the headline event — one per additional recent
-     event, so several launches/market events can show at once instead of the
-     hero having to pick a single "runner-up". */
+     event, so several market events can show at once instead of the hero
+     having to pick a single "runner-up". */
   .hero-card-timeline-row {
     margin-top: 12px;
     padding-top: 12px;
@@ -351,14 +296,13 @@
 </style>
 
 <%# ── HERO (outside Turbo Frame) ─────────────────────────────────── %>
-<% if @all_events %>
+<% if @recent_events %>
   <%
-    recent_events = hero_events(@all_events)
-    primary_event = recent_events[0]
+    primary_event = @recent_events[0]
     # Array#[1..] returns nil (not []) when the receiver itself is empty —
-    # reachable if @all_events has zero events — so this guard is load-bearing,
-    # not defensive dead code.
-    rest_events = recent_events[1..] || []
+    # reachable if there are no published market events — so this guard is
+    # load-bearing, not defensive dead code.
+    rest_events = @recent_events[1..] || []
   %>
 
   <div class="hero-grid">
@@ -405,54 +349,24 @@
           Latest events
         </div>
 
-        <% launch_model = primary_event.model if primary_event&.kind == "launch" %>
         <% if primary_event %>
           <div class="hero-card-headline">
-            <div>
-              <span class="hero-card-kind-chip <%= primary_event.kind %>">
-                <%= hero_kind_chip_label(primary_event.kind) %>
-              </span>
-            </div>
-            <div class="hero-card-title">
-              <% if primary_event.model %>
-                <%= link_to primary_event.title, model_path(primary_event.model) %>
-              <% else %>
-                <%= primary_event.title %>
-              <% end %>
-            </div>
-            <div class="hero-card-date"><%= fmt_date_full(primary_event.date) %></div>
-            <% if launch_model&.description.present? %>
-              <div class="hero-card-desc"><%= launch_model.description %></div>
-            <% end %>
+            <div class="hero-card-title"><%= primary_event.title %></div>
+            <div class="hero-card-date"><%= fmt_date_full(primary_event.event_date) %></div>
             <% if primary_event.so_what.present? %>
               <div class="hero-card-sowhat"><%= primary_event.so_what %></div>
             <% elsif primary_event.note.present? %>
               <div class="hero-card-note"><%= primary_event.note %></div>
-            <% end %>
-            <% if (m = launch_model) %>
-              <div class="hero-card-chips">
-                <span class="hero-card-chip tp-io-light"><%= io_price(m, light: true) %></span>
-                <% if m.context_window %>
-                  <span class="hero-card-chip num"><%= tokens_short(m.context_window) %> ctx</span>
-                <% end %>
-              </div>
             <% end %>
           </div>
         <% end %>
 
         <% rest_events.each do |event| %>
           <div class="hero-card-timeline-row">
-            <span class="hero-card-kind-chip <%= event.kind %>" style="font-size:10px;padding:2px 7px">
-              <%= hero_kind_chip_label(event.kind) %>
-            </span>
             <span style="font-size:13px;font-weight:500;color:#e8eaf0;flex:1;min-width:0">
-              <% if event.model %>
-                <%= link_to event.title, model_path(event.model), style: "color:inherit;text-decoration:none" %>
-              <% else %>
-                <%= event.title %>
-              <% end %>
+              <%= event.title %>
             </span>
-            <span style="font-size:11px;color:rgba(200,205,220,.5);white-space:nowrap"><%= fmt_date_full(event.date) %></span>
+            <span style="font-size:11px;color:rgba(200,205,220,.5);white-space:nowrap"><%= fmt_date_full(event.event_date) %></span>
           </div>
         <% end %>
 

@@ -72,21 +72,6 @@ class MarketEventTest < ActiveSupport::TestCase
     assert_not_includes ids, pub.id
   end
 
-  test "listed scope returns published events in chronological order" do
-    e2 = MarketEvent.create!(valid_attrs.merge(event_date: Date.new(2024, 3, 1)))
-    e1 = MarketEvent.create!(valid_attrs.merge(event_date: Date.new(2024, 1, 1),
-                                                title: "Earlier event"))
-    _draft = MarketEvent.create!(valid_attrs.merge(title: "Draft", status: "draft",
-                                                    event_date: Date.new(2024, 2, 1)))
-
-    listed = MarketEvent.listed
-    listed_ids = listed.map(&:id)
-    assert_includes listed_ids, e1.id
-    assert_includes listed_ids, e2.id
-    assert_not_includes listed_ids, _draft.id
-    assert listed_ids.index(e1.id) < listed_ids.index(e2.id), "expected chronological order"
-  end
-
   # --- associations ----------------------------------------------------------
 
   test "news_items association nullifies market_event_id on destroy" do

@@ -1,7 +1,11 @@
 namespace :market_events do
-  desc "Generate the \"so what\" for published market events that don't have one yet"
+  desc "Generate the \"so what\" for published market events missing one or stored mid-sentence"
   task backfill_insights: :environment do
-    scope = MarketEvent.published.where(so_what: [ nil, "" ]).chronological
+    # The trailing "..." marks a value written by the old raw-character cut in
+    # MarketEvent::Insight — regenerating rewrites it under the sentence-aware fit.
+    scope = MarketEvent.published
+      .where(so_what: [ nil, "" ]).or(MarketEvent.published.where("so_what LIKE ?", "%..."))
+      .chronological
     total = scope.count
     puts "Backfilling the \"so what\" for #{total} market event(s)…"
 

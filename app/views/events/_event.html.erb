@@ -1,25 +1,13 @@
-<% launch_model = event.model if event.kind == "launch" %>
-<li class="ev-item" data-kind="<%= event.kind %>">
-  <span class="ev-node ev-<%= event.kind %>" aria-hidden="true">
-    <%= icon(event_kind_icon(event.kind), size: 14) %>
+<li class="ev-item">
+  <span class="ev-node" aria-hidden="true">
+    <%= icon(:bolt, size: 14) %>
   </span>
   <div class="ev-body">
     <div class="ev-meta">
-      <time class="ev-date" datetime="<%= event.date.iso8601 %>"><%= fmt_date_full(event.date) %></time>
-      <span class="tp-badge tp-kind-<%= event.kind %>"><%= event_kind_label(event.kind) %></span>
+      <time class="ev-date" datetime="<%= event.event_date.iso8601 %>"><%= fmt_date_full(event.event_date) %></time>
     </div>
 
-    <h3 class="ev-title">
-      <% if event.model %>
-        <%= link_to event.title, model_path(event.model) %>
-      <% else %>
-        <%= event.title %>
-      <% end %>
-    </h3>
-
-    <% if launch_model&.description.present? %>
-      <p class="ev-desc"><%= launch_model.description %></p>
-    <% end %>
+    <h3 class="ev-title"><%= event.title %></h3>
 
     <% if event.note.present? %>
       <p class="ev-note"><%= event.note %></p>
@@ -29,22 +17,7 @@
       <p class="ev-sowhat"><%= event.so_what %></p>
     <% end %>
 
-    <% if (m = launch_model) %>
-      <div class="ev-tags">
-        <%= link_to provider_path(event.provider), class: "ev-provider" do %>
-          <%= provider_square(event.provider, size: :sm) %>
-          <span><%= event.provider.name %></span>
-        <% end %>
-        <% if m.native_priced? %>
-          <span class="ev-tag"><%= m.price_headline %></span>
-        <% elsif m.token_priced? %>
-          <span class="ev-tag"><%= io_price(m, tag: true) %></span>
-        <% end %>
-        <% if m.context_window %>
-          <span class="ev-tag num"><%= tokens_short(m.context_window) %> ctx</span>
-        <% end %>
-      </div>
-    <% elsif event.citations.present? %>
+    <% if event.citations.present? %>
       <div class="ev-cites">
         <span class="ev-cites-label">Sources</span>
         <% event.citations.each do |citation| %>

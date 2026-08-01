@@ -7,5 +7,5 @@
   <% end %>
 <% end %>
 <%= turbo_stream.replace "ev-sentinel" do %>
-  <%= render "events/sentinel", has_more: @has_more, next_page: @next_page, kind: @kind %>
+  <%= render "events/sentinel", has_more: @has_more, next_page: @next_page %>
 <% end %>

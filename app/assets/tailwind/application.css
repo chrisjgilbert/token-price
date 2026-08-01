@@ -407,11 +407,7 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.025em; line-height: 1.08; 
 .tp-tier-small    { color: var(--color-amber-700);  background: var(--color-amber-50);  border-color: var(--color-amber-100); }
 
 /* Kind colour variants — pair with .tp-badge, like the tier classes above.
-   Single source for the launch=emerald / market=rose pairing on the events
-   timeline (the dark homepage-hero chip is a separate surface) and the
-   release=indigo / price=amber pairing on the news feed. */
-.tp-kind-launch   { color: var(--color-emerald-700); background: var(--color-emerald-50); border-color: var(--color-emerald-100); }
-.tp-kind-market   { color: var(--color-rose-700);    background: var(--color-rose-50);    border-color: var(--color-rose-100); }
+   Single source for the release=indigo / price=amber pairing on the news feed. */
 .tp-kind-release  { color: var(--color-indigo-700);  background: var(--color-indigo-50);  border-color: var(--color-indigo-100); }
 .tp-kind-price    { color: var(--color-amber-700);   background: var(--color-amber-50);   border-color: var(--color-amber-100); }
 

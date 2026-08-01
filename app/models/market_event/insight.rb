@@ -9,9 +9,13 @@
 class MarketEvent::Insight
   class Error < StandardError; end
 
-  MODEL         = "claude-sonnet-5"
-  MAX_TOKENS    = 2048
-  SO_WHAT_LIMIT = 320
+  MODEL      = "claude-sonnet-5"
+  MAX_TOKENS = 2048
+  # Two sentences carrying real figures ("$14/M blended, $2 in / $12 out, below
+  # Sonnet 4.6 at $3/$15") run past 300 on their own — the old 320 cap cut the
+  # first sentence of a dense answer in half. The events page wraps freely at
+  # 62ch with no clamp, so this is an editorial bound, not a layout one.
+  SO_WHAT_LIMIT = 400
   MAX_CITATIONS = 4
 
   SYSTEM_PROMPT = <<~PROMPT.strip
@@ -26,6 +30,7 @@ class MarketEvent::Insight
     questions, no "X is Y" fragments, no hype words. State the consequence plainly.
 
     Write only the one or two sentences — no preamble, no heading, no "So what:" label.
+    Keep the whole thing under #{SO_WHAT_LIMIT} characters.
   PROMPT
 
   def initialize(event, client: nil)
@@ -43,7 +48,7 @@ class MarketEvent::Insight
     )
 
     {
-      so_what:   result[:text].to_s.strip.truncate(SO_WHAT_LIMIT),
+      so_what:   MarketEvent::Prose.fit(result[:text], limit: SO_WHAT_LIMIT),
       citations: result[:citations].first(MAX_CITATIONS)
     }
   rescue AnthropicClient::Error => e

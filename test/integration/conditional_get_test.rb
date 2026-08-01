@@ -113,6 +113,55 @@ class ConditionalGetTest < ActionDispatch::IntegrationTest
   end
 
   test "events supports conditional GET" do
+    MarketEvent.create!(title: "A market event", event_date: Date.current,
+                        kind: "market", status: "published")
+
     assert_not_modified_on_replay(events_url)
+  end
+
+  test "events still carries a Last-Modified with no market events yet" do
+    # Without one the etag is fully static, so a client that cached the empty
+    # timeline would 304 forever once events are published.
+    MarketEvent.delete_all
+
+    get events_url
+    assert_response :success
+    assert response.headers["Last-Modified"].present?,
+      "expected a Last-Modified even when the timeline is empty"
+  end
+
+  test "events revalidates when a model changes — the shared footer counts them" do
+    MarketEvent.create!(title: "A market event", event_date: Date.current,
+                        kind: "market", status: "published")
+    etag, last_mod = assert_not_modified_on_replay(events_url)
+
+    # A plain touch can land in the same second as the request above, and
+    # Last-Modified only has second granularity — so stamp it unambiguously.
+    ai_models(:opus).update_column(:updated_at, 1.minute.from_now)
+
+    get events_url, headers: { "If-None-Match" => etag, "If-Modified-Since" => last_mod }
+    assert_response :success, "a model edit must bust /events — the footer renders AiModel.listed.count"
+  end
+
+  test "events revalidates on an If-None-Match alone once an event is published" do
+    # strict_freshness (config.load_defaults 8.1) makes the etag the sole
+    # validator when If-None-Match is sent, so the freshness stamp has to be in
+    # the etag key. Without it a client that cached the empty timeline — a real
+    # browser walking the site, as the system tests do — never sees a new event.
+    MarketEvent.delete_all
+
+    get events_url
+    etag = response.headers["ETag"]
+
+    event = MarketEvent.create!(title: "First published event", event_date: Date.current,
+                                kind: "market", status: "published")
+    # The stamp reaches the etag through Array#to_s, which renders a Time to the
+    # second — so an event created in the same second as the fixtures' newest
+    # row leaves the key unchanged. Stamp it forward rather than race the clock.
+    event.update_column(:updated_at, 1.minute.from_now)
+
+    get events_url, headers: { "If-None-Match" => etag }
+    assert_response :success
+    assert_select ".ev-title", text: /First published event/
   end
 end

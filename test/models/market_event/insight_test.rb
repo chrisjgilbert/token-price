@@ -62,13 +62,48 @@ class MarketEvent::InsightTest < ActiveSupport::TestCase
     assert_match "DeepSeek R1 ships — deepseek.com — https://deepseek.com/r1", prompt
   end
 
-  test "truncates an over-long so_what" do
+  test "keeps a so_what within the limit exactly as written" do
+    text = "Frontier prices fell by a third. Mid-tier models no longer undercut them on cost alone."
     event = stub_event(title: "t", event_date: Date.new(2025, 1, 1))
-    client = fake_anthropic_search_client(text: "A" * 500)
+    client = fake_anthropic_search_client(text: text)
 
     result = MarketEvent::Insight.new(event, client: client).run
 
-    assert result[:so_what].length <= MarketEvent::Insight::SO_WHAT_LIMIT
+    assert_equal text, result[:so_what]
+  end
+
+  test "an over-long so_what drops whole sentences rather than stopping mid-word" do
+    # Four sentences, over the limit together; the last must be dropped whole.
+    text = "Anthropic cut Sonnet 5 input pricing to $1.50 per million tokens. " \
+           "That undercuts GPT-5 mini by about 40 percent at the same context length. " \
+           "Teams already batching through Sonnet 4.5 see the change without a migration. " \
+           "This fourth sentence is long enough on its own to push the whole answer well past " \
+           "the character budget, so the fit has to drop it whole rather than cut into it, " \
+           "which is the behaviour under test here."
+    event = stub_event(title: "t", event_date: Date.new(2025, 1, 1))
+    client = fake_anthropic_search_client(text: text)
+
+    so_what = MarketEvent::Insight.new(event, client: client).run[:so_what]
+
+    assert_operator so_what.length, :<=, MarketEvent::Insight::SO_WHAT_LIMIT
+    refute_includes so_what, "…", "a sentence-boundary cut needs no ellipsis"
+    assert so_what.end_with?("without a migration."), "expected the last whole sentence to be kept"
+    refute_includes so_what, "fourth sentence"
+  end
+
+  test "a single over-long sentence falls back to a word boundary" do
+    event = stub_event(title: "t", event_date: Date.new(2025, 1, 1))
+    client = fake_anthropic_search_client(text: "#{'word ' * 200}end.")
+
+    so_what = MarketEvent::Insight.new(event, client: client).run[:so_what]
+
+    assert_operator so_what.length, :<=, MarketEvent::Insight::SO_WHAT_LIMIT
+    assert so_what.end_with?("word…"), "expected a whole-word cut, not a split word"
+  end
+
+  test "states the character budget in the prompt so the model can land under it" do
+    assert_includes MarketEvent::Insight::SYSTEM_PROMPT,
+      "under #{MarketEvent::Insight::SO_WHAT_LIMIT} characters"
   end
 
   test "caps the number of citations" do

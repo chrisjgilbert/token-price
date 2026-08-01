@@ -33,9 +33,9 @@ class ModelsController < ApplicationController
     # Conditional GET. The page varies by every filter/sort param AND the category
     # tab, so they MUST ride in the etag — otherwise a conditional request for one
     # view would 304 off another's cache (a tab off a sibling tab included).
-    # last_modified spans the catalog AND the market events + model rows the hero
-    # renders (helpers.build_all_events), so editing a market event or a model
-    # busts the cache instead of serving a stale hero. Renders 304 on a match.
+    # last_modified spans the catalog AND the market events the hero renders, so
+    # editing a market event busts the cache instead of serving a stale hero.
+    # Renders 304 on a match.
     return if catalog_fresh?(etag: [ :index, @category.slug, @provider_slugs.sort, @sort, @dir, @query, @modalities.sort ],
       last_modified: helpers.timeline_last_modified)
 
@@ -48,7 +48,7 @@ class ModelsController < ApplicationController
     # Hero content (loaded once; lives outside the Turbo Frame).
     # Only loaded on full-page renders, not on Turbo Frame refreshes.
     unless request.headers["Turbo-Frame"] == "models"
-      @all_events = helpers.build_all_events
+      @recent_events = MarketEvent.published.recent_first.limit(5).to_a
       @providers_count = Provider.count
     end
   end

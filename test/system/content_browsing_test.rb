@@ -2,7 +2,7 @@ require "application_system_test_case"
 
 # Browsing the read pages the way a visitor does: a model's detail page with its
 # price-history chart, a provider page and its model list, and the market-events
-# timeline with its kind filter. These confirm the pages render and link up in a
+# timeline. These confirm the pages render and link up in a
 # real browser, including the SVG chart the price-chart controller enhances.
 class ContentBrowsingTest < ApplicationSystemTestCase
   test "a model detail page shows its price history chart and snapshots" do
@@ -29,14 +29,19 @@ class ContentBrowsingTest < ApplicationSystemTestCase
     assert_selector "h1", text: "DeepSeek V4 Pro"
   end
 
-  test "the events timeline renders and filters by kind" do
+  test "the events timeline renders published market events" do
+    # There is no market_events fixture file, so the timeline needs a row of its
+    # own — without one the page renders its empty state and no #ev-timeline.
+    MarketEvent.create!(title: "Opus gets 67% cheaper", event_date: Date.current,
+                        kind: "market", status: "published",
+                        note: "Anthropic drops Opus pricing to $5/$25.")
+
     visit events_path
 
     assert_selector "h1", text: "Market events"
     assert_selector "#ev-timeline"
-
-    click_on "Market"
-
-    assert_current_path events_path(kind: "market")
+    assert_selector ".ev-title", text: "Opus gets 67% cheaper"
+    # The kind filter is gone — market events are the only kind left.
+    assert_no_selector ".events-toolbar"
   end
 end
