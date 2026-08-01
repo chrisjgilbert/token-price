@@ -5,6 +5,8 @@
 class MarketEvent::Announcement
   BASE_URL = "https://tokenprice.fyi"
   EVENTS_URL = "#{BASE_URL}/events"
+  # Below this, drop the blurb rather than post a stub fragment.
+  MIN_BLURB_CHARS = 40
 
   def initialize(event)
     @event = event
@@ -31,11 +33,22 @@ class MarketEvent::Announcement
   end
 
   def post_text
-    # The "so what" is the more shareable line, so it leads the body when present;
-    # the note is the fallback for events that haven't been given one yet.
-    blurb = (@event.so_what.presence || @event.note).to_s.strip.presence
-    body = [ @event.title, blurb ].compact.join("\n\n")
     suffix = "\n\n#{EVENTS_URL}"
-    "#{body.truncate(SocialBroadcast::CHAR_LIMIT - suffix.length, omission: '…')}#{suffix}"
+    budget = SocialBroadcast::CHAR_LIMIT - suffix.length
+    # The title identifies the event, so it gets the budget first; the blurb
+    # takes what's left. Fitting them separately means a long blurb can't eat
+    # into the title, which truncating the joined body used to allow.
+    title = @event.title.to_s.truncate(budget, separator: /\s/, omission: "…")
+    "#{[ title, blurb_within(budget - title.length - 2) ].compact.join("\n\n")}#{suffix}"
+  end
+
+  # The "so what" is the more shareable line, so it leads when present; the note
+  # is the fallback for events that haven't been given one yet. Dropped entirely
+  # rather than posted as a stub when there's too little room left.
+  def blurb_within(budget)
+    blurb = (@event.so_what.presence || @event.note).to_s.strip.presence
+    return if blurb.nil? || budget < MIN_BLURB_CHARS
+
+    MarketEvent::Prose.fit(blurb, limit: budget)
   end
 end

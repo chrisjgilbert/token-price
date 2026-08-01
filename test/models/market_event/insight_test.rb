@@ -77,15 +77,16 @@ class MarketEvent::InsightTest < ActiveSupport::TestCase
     text = "Anthropic cut Sonnet 5 input pricing to $1.50 per million tokens. " \
            "That undercuts GPT-5 mini by about 40 percent at the same context length. " \
            "Teams already batching through Sonnet 4.5 see the change without a migration. " \
-           "This fourth sentence is long enough on its own to push the whole answer past the " \
-           "character budget, so the fit has to drop it rather than cut it."
+           "This fourth sentence is long enough on its own to push the whole answer well past " \
+           "the character budget, so the fit has to drop it whole rather than cut into it, " \
+           "which is the behaviour under test here."
     event = stub_event(title: "t", event_date: Date.new(2025, 1, 1))
     client = fake_anthropic_search_client(text: text)
 
     so_what = MarketEvent::Insight.new(event, client: client).run[:so_what]
 
     assert_operator so_what.length, :<=, MarketEvent::Insight::SO_WHAT_LIMIT
-    refute_includes so_what, "...", "a sentence-boundary cut needs no ellipsis"
+    refute_includes so_what, "…", "a sentence-boundary cut needs no ellipsis"
     assert so_what.end_with?("without a migration."), "expected the last whole sentence to be kept"
     refute_includes so_what, "fourth sentence"
   end
@@ -97,7 +98,7 @@ class MarketEvent::InsightTest < ActiveSupport::TestCase
     so_what = MarketEvent::Insight.new(event, client: client).run[:so_what]
 
     assert_operator so_what.length, :<=, MarketEvent::Insight::SO_WHAT_LIMIT
-    assert so_what.end_with?("word..."), "expected a whole-word cut, not a split word"
+    assert so_what.end_with?("word…"), "expected a whole-word cut, not a split word"
   end
 
   test "states the character budget in the prompt so the model can land under it" do

@@ -9,9 +9,13 @@
 class MarketEvent::Insight
   class Error < StandardError; end
 
-  MODEL         = "claude-sonnet-5"
-  MAX_TOKENS    = 2048
-  SO_WHAT_LIMIT = 320
+  MODEL      = "claude-sonnet-5"
+  MAX_TOKENS = 2048
+  # Two sentences carrying real figures ("$14/M blended, $2 in / $12 out, below
+  # Sonnet 4.6 at $3/$15") run past 300 on their own — the old 320 cap cut the
+  # first sentence of a dense answer in half. The events page wraps freely at
+  # 62ch with no clamp, so this is an editorial bound, not a layout one.
+  SO_WHAT_LIMIT = 400
   MAX_CITATIONS = 4
 
   SYSTEM_PROMPT = <<~PROMPT.strip
@@ -44,7 +48,7 @@ class MarketEvent::Insight
     )
 
     {
-      so_what:   fit(result[:text].to_s.strip),
+      so_what:   MarketEvent::Prose.fit(result[:text], limit: SO_WHAT_LIMIT),
       citations: result[:citations].first(MAX_CITATIONS)
     }
   rescue AnthropicClient::Error => e
@@ -54,24 +58,6 @@ class MarketEvent::Insight
   private
 
   attr_reader :event
-
-  # The prompt asks for something under SO_WHAT_LIMIT, but the model can still
-  # overrun. Cutting at a raw character count leaves the events page showing a
-  # sentence that stops mid-word, and the cut is persisted — so keep whole
-  # sentences instead, and only fall back to a word boundary when even the first
-  # sentence is over budget.
-  def fit(text)
-    return text if text.length <= SO_WHAT_LIMIT
-
-    kept = +""
-    text.scan(/\S.*?[.!?](?=\s|\z)/).each do |sentence|
-      candidate = kept.empty? ? sentence : "#{kept} #{sentence}"
-      break if candidate.length > SO_WHAT_LIMIT
-
-      kept = candidate
-    end
-    kept.presence || text.truncate(SO_WHAT_LIMIT, separator: /\s/)
-  end
 
   def prompt
     lines = [ "Event: #{event.title}", "Date: #{event.event_date}" ]
