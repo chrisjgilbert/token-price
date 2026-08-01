@@ -83,5 +83,5 @@ gem "mission_control-jobs"
 gem "stablemate", github: "chrisjgilbert/stablemate", glob: "gem/*.gemspec"
 
 group :production do
-  gem "rails_semantic_logger", "~> 4.0"
+  gem "rails_semantic_logger", "~> 5.1"
 end
