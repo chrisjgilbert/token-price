@@ -26,6 +26,7 @@ class MarketEvent::Insight
     questions, no "X is Y" fragments, no hype words. State the consequence plainly.
 
     Write only the one or two sentences — no preamble, no heading, no "So what:" label.
+    Keep the whole thing under #{SO_WHAT_LIMIT} characters.
   PROMPT
 
   def initialize(event, client: nil)
@@ -43,7 +44,7 @@ class MarketEvent::Insight
     )
 
     {
-      so_what:   result[:text].to_s.strip.truncate(SO_WHAT_LIMIT),
+      so_what:   fit(result[:text].to_s.strip),
       citations: result[:citations].first(MAX_CITATIONS)
     }
   rescue AnthropicClient::Error => e
@@ -53,6 +54,24 @@ class MarketEvent::Insight
   private
 
   attr_reader :event
+
+  # The prompt asks for something under SO_WHAT_LIMIT, but the model can still
+  # overrun. Cutting at a raw character count leaves the events page showing a
+  # sentence that stops mid-word, and the cut is persisted — so keep whole
+  # sentences instead, and only fall back to a word boundary when even the first
+  # sentence is over budget.
+  def fit(text)
+    return text if text.length <= SO_WHAT_LIMIT
+
+    kept = +""
+    text.scan(/\S.*?[.!?](?=\s|\z)/).each do |sentence|
+      candidate = kept.empty? ? sentence : "#{kept} #{sentence}"
+      break if candidate.length > SO_WHAT_LIMIT
+
+      kept = candidate
+    end
+    kept.presence || text.truncate(SO_WHAT_LIMIT, separator: /\s/)
+  end
 
   def prompt
     lines = [ "Event: #{event.title}", "Date: #{event.event_date}" ]

@@ -113,6 +113,11 @@ class ConditionalGetTest < ActionDispatch::IntegrationTest
   end
 
   test "events supports conditional GET" do
+    # Last-Modified is the newest market event's updated_at, so the page needs
+    # at least one — there is no market_events fixture file.
+    MarketEvent.create!(title: "A market event", event_date: Date.current,
+                        kind: "market", status: "published")
+
     assert_not_modified_on_replay(events_url)
   end
 end

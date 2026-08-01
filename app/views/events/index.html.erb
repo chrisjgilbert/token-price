@@ -1,5 +1,5 @@
-<% content_for :title, "Market events — AI model pricing & launch timeline — tokenprice.fyi" %>
-<% content_for :description, "A dated timeline of AI model market events and launches, newest first." %>
+<% content_for :title, "Market events — AI model pricing timeline — tokenprice.fyi" %>
+<% content_for :description, "A dated timeline of AI model pricing and market events, newest first." %>
 <% content_for :canonical, events_url %>
 <% content_for :head do %>
   <%= json_ld({
@@ -7,7 +7,7 @@
         "@type": "WebPage",
         name: "Market events",
         url: events_url,
-        description: "A dated timeline of AI model market events and launches, newest first.",
+        description: "A dated timeline of AI model pricing and market events, newest first.",
         isPartOf: { "@type": "WebSite", "@id": "#{request.base_url}/#website" }
       }) %>
 <% end %>
@@ -17,33 +17,12 @@
   <header class="events-header">
     <h1 class="events-h1">Market events</h1>
     <p class="events-subtitle">
-      Every market event and model launch we've tracked —
-      <span class="num"><%= @market_count %></span> market events and
-      <span class="num"><%= @launch_count %></span> launches<% if @earliest_year %>, going back to
+      Every pricing and market event we've tracked —
+      <span class="num"><%= @total_count %></span> in all<% if @earliest_year %>, going back to
       <span class="num"><%= @earliest_year %></span><% end %>.
       Curated from the headlines we scan each day.
     </p>
   </header>
-
-  <%# ── Filter ─────────────────────────────────────────────────────────── %>
-  <%# Each tab is a link to that kind's first page — filtering happens on the
-      server, so the count reflects the whole timeline, not just what's loaded. %>
-  <div class="events-toolbar">
-    <div class="tp-seg events-seg" role="group" aria-label="Filter events by kind">
-      <%= link_to events_path, class: ("on" if @kind.nil?), data: { kind: "all" },
-            "aria-current": ("page" if @kind.nil?) do %>
-        All <span class="events-seg-n"><%= @total_count %></span>
-      <% end %>
-      <%= link_to events_path(kind: "market"), class: ("on" if @kind == "market"), data: { kind: "market" },
-            "aria-current": ("page" if @kind == "market") do %>
-        Market <span class="events-seg-n"><%= @market_count %></span>
-      <% end %>
-      <%= link_to events_path(kind: "launch"), class: ("on" if @kind == "launch"), data: { kind: "launch" },
-            "aria-current": ("page" if @kind == "launch") do %>
-        Launches <span class="events-seg-n"><%= @launch_count %></span>
-      <% end %>
-    </div>
-  </div>
 
   <%# ── Timeline ───────────────────────────────────────────────────────── %>
   <div class="tp-card events-card">
@@ -54,21 +33,13 @@
             <%= render "events/year_group", year: year, events: events %>
           <% end %>
         </div>
-        <%= render "events/sentinel", has_more: @has_more, next_page: @next_page, kind: @kind %>
-      </div>
-    <% elsif @kind %>
-      <div class="tp-empty">
-        <div class="tp-empty-icon"><%= icon(:calendar, size: 26) %></div>
-        <p class="font-medium">No <%= event_kind_noun(@kind) %> tracked.</p>
-        <p class="text-sm mt-1" style="color:var(--color-slate-400)">
-          <%= link_to "See all events", events_path, class: "text-indigo-600 hover:underline" %>.
-        </p>
+        <%= render "events/sentinel", has_more: @has_more, next_page: @next_page %>
       </div>
     <% else %>
       <div class="tp-empty">
         <div class="tp-empty-icon"><%= icon(:calendar, size: 26) %></div>
         <p class="font-medium">No market events recorded yet.</p>
-        <p class="text-sm mt-1" style="color:var(--color-slate-400)">Launches and market events will appear here as they're tracked.</p>
+        <p class="text-sm mt-1" style="color:var(--color-slate-400)">Market events will appear here as they're tracked.</p>
       </div>
     <% end %>
   </div>
@@ -96,23 +67,6 @@
   font-size: 17px;
   line-height: 1.6;
 }
-
-/* ── Filter toolbar ──────────────────────────────────────────────────── */
-.events-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 18px;
-}
-.events-seg-n {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  margin-left: 5px;
-  opacity: .55;
-}
-.tp-seg .on .events-seg-n { opacity: .8; }
 
 /* ── Timeline card ───────────────────────────────────────────────────── */
 /* No `overflow` here on purpose: a clipping context would become the scroll
@@ -182,10 +136,9 @@
   position: relative;
   z-index: 1;
   box-shadow: 0 0 0 4px #fff; /* halo so the spine doesn't touch the node */
+  background: var(--color-rose-500);
 }
 .ev-node svg { width: 14px; height: 14px; }
-.ev-market { background: var(--color-rose-500); }
-.ev-launch { background: var(--color-emerald-500); }
 
 .ev-body { grid-column: 2; min-width: 0; padding-top: 1px; }
 
@@ -234,38 +187,6 @@
   max-width: 62ch;
 }
 
-/* Launch metadata row + market source link */
-.ev-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-.ev-provider {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px 3px 5px;
-  border-radius: var(--radius-pill);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--color-slate-600);
-  text-decoration: none;
-  transition: background .14s var(--ease-default), color .14s var(--ease-default);
-}
-.ev-provider:hover { background: var(--color-slate-100); color: var(--color-slate-900); }
-.ev-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: var(--radius-pill);
-  background: var(--color-slate-100);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--color-slate-600);
-}
-.ev-tag .tp-io { font-size: 12px; }
 .ev-source {
   display: inline-flex;
   align-items: center;

@@ -33,4 +33,13 @@ class MarketEventsBackfillTaskTest < ActiveSupport::TestCase
     assert_equal "already here",      filled.reload.so_what
     assert_nil draft.reload.so_what
   end
+
+  test "regenerates a so_what left cut mid-sentence by the old raw-character truncation" do
+    cut = MarketEvent.create!(title: "Cut", event_date: Date.new(2025, 1, 4), kind: "market",
+                              status: "published", so_what: "Frontier prices fell by a thi...")
+
+    capture_io { @task.invoke }
+
+    assert_equal "Backfilled prose.", cut.reload.so_what
+  end
 end

@@ -43,17 +43,6 @@ module OpenRouter
       SyncDigest.new(result, date: date)
     end
 
-    # A persisted model launch_posts can look the description up by slug. Only
-    # slug and description matter here; the post's name/provider come from the
-    # CreatedRecord.
-    def make_model(slug:, description:)
-      AiModel.create!(
-        name: slug, slug: slug, provider: providers(:anthropic),
-        source: AiModel::OPENROUTER_SOURCE, status: "active",
-        description: description
-      )
-    end
-
     # --- nil when nothing changed -------------------------------------------
 
     test "returns nil when both records arrays are empty" do
@@ -250,110 +239,6 @@ module OpenRouter
       assert_includes section_text, "cached"
       # fmt(0) returns "0", not "0.00"
       assert_includes section_text, "$0→$0 cached"
-    end
-
-    # --- launch_posts (social post strings) ---------------------------------
-
-    test "launch_posts builds one post for an announceable provider" do
-      c = make_created(model_name: "Claude Haiku 4.5", provider_name: "Anthropic",
-                       model_slug: "claude-haiku-4-5",
-                       input_per_mtok: 1.0, output_per_mtok: 5.0)
-      posts = digest(make_result(created_records: [ c ])).launch_posts
-      assert_equal 1, posts.size
-      post = posts.first
-      assert_includes post, "Claude Haiku 4.5"
-      assert_includes post, "Anthropic"
-      assert_includes post, "$1/M in"
-      assert_includes post, "$5/M out"
-      assert_includes post, "https://tokenprice.fyi/models/claude-haiku-4-5"
-    end
-
-    test "launch_posts excludes a non-announceable provider" do
-      c = make_created(provider_name: "NewLab")
-      assert_empty digest(make_result(created_records: [ c ])).launch_posts
-    end
-
-    test "launch_posts keeps only announceable records, in order" do
-      records = [
-        make_created(model_name: "Claude Haiku 4.5", provider_name: "Anthropic",
-                     model_slug: "claude-haiku-4-5"),
-        make_created(model_name: "Wonder 1", provider_name: "NewLab",
-                     model_slug: "newlab-wonder-1"),
-        make_created(model_name: "GPT-6 mini", provider_name: "OpenAI",
-                     model_slug: "gpt-6-mini")
-      ]
-      posts = digest(make_result(created_records: records)).launch_posts
-      assert_equal 2, posts.size
-      assert_includes posts[0], "Claude Haiku 4.5"
-      assert_includes posts[1], "GPT-6 mini"
-    end
-
-    test "launch_posts returns empty array with no created records" do
-      assert_empty digest(make_result).launch_posts
-    end
-
-    test "launch_posts returns empty array when all records are non-announceable" do
-      records = [ make_created(provider_name: "NewLab"),
-                  make_created(provider_name: "ObscureCo") ]
-      assert_empty digest(make_result(created_records: records)).launch_posts
-    end
-
-    test "launch_posts formats prices via fmt" do
-      c = make_created(provider_name: "OpenAI",
-                       input_per_mtok: 0.5, output_per_mtok: 5.0)
-      post = digest(make_result(created_records: [ c ])).launch_posts.first
-      assert_includes post, "$0.5/M in"
-      assert_includes post, "$5/M out"
-    end
-
-    test "launch_posts stays within BlueSky's 300-character limit" do
-      c = make_created(model_name: "Claude Haiku 4.5", provider_name: "Anthropic",
-                       model_slug: "claude-haiku-4-5",
-                       input_per_mtok: 1.0, output_per_mtok: 5.0)
-      post = digest(make_result(created_records: [ c ])).launch_posts.first
-      assert_operator post.length, :<=, 300
-    end
-
-    test "launch_posts includes the model's description as a news blurb" do
-      make_model(slug: "acme-nova-1",
-                 description: "A fast multimodal model tuned for extraction and classification.")
-      c = make_created(model_name: "Nova 1", provider_name: "Anthropic",
-                       model_slug: "acme-nova-1", input_per_mtok: 1.0, output_per_mtok: 5.0)
-
-      post = digest(make_result(created_records: [ c ])).launch_posts.first
-      assert_includes post, "A fast multimodal model tuned for extraction"
-      assert_includes post, "https://tokenprice.fyi/models/acme-nova-1"
-      assert_operator post.length, :<=, 300
-    end
-
-    test "launch_posts truncates an overlong description but keeps the link" do
-      make_model(slug: "acme-verbose-1", description: "x" * 500)
-      c = make_created(model_name: "Verbose 1", provider_name: "Anthropic",
-                       model_slug: "acme-verbose-1")
-
-      post = digest(make_result(created_records: [ c ])).launch_posts.first
-      assert_operator post.length, :<=, 300
-      assert post.end_with?("https://tokenprice.fyi/models/acme-verbose-1")
-      assert_includes post, "…"
-    end
-
-    test "launch_posts flattens whitespace in a multi-line description" do
-      make_model(slug: "acme-multi-1", description: "First line.\n\nSecond   line.")
-      c = make_created(model_name: "Multi 1", provider_name: "Anthropic",
-                       model_slug: "acme-multi-1")
-
-      post = digest(make_result(created_records: [ c ])).launch_posts.first
-      assert_includes post, "First line. Second line."
-    end
-
-    test "launch_posts falls back to name and price when the model has no description" do
-      c = make_created(model_name: "Claude Haiku 4.5", provider_name: "Anthropic",
-                       model_slug: "unpersisted-model",
-                       input_per_mtok: 1.0, output_per_mtok: 5.0)
-      post = digest(make_result(created_records: [ c ])).launch_posts.first
-
-      assert_equal "New model: Claude Haiku 4.5 (Anthropic) — $1/M in, $5/M out.\n\n" \
-                   "https://tokenprice.fyi/models/unpersisted-model", post
     end
   end
 end

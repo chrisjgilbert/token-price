@@ -143,6 +143,14 @@ path a silent no-op (CI green with no secrets).
 
 ## P2 — Auto-post new model launches from the daily sync
 
+> **Shipped, then reverted (2026-08-01).** The site's scope narrowed to pricing
+> and curated market events, so model releases are no longer public output: the
+> launch posts are gone, and the public timeline carries `MarketEvent` rows only.
+> `MarketEvent::Announcement` (P1) is the sole path to Mastodon/BlueSky. The Slack
+> sync digest keeps its "New models" section — that's an internal cue to curate,
+> not a public post. The reasoning below is kept as the record of why it was
+> built; it no longer describes the code.
+
 **Why.** A new model appearing is a clean, low-noise thing to post and it isn't
 reliably captured elsewhere — a launch doesn't necessarily generate a
 `MarketEvent`, so without this it goes unannounced. `OpenRouter::SyncDigest`
@@ -224,7 +232,8 @@ links, runs on schedule, and no-ops cleanly on a week with no changes.
 
 ## Suggested order of execution
 
-**P1 and P2 are the current scope.** P3/P4 are recorded for later.
+**P1 is the current scope.** P2 shipped and was reverted (see above); P3/P4 are
+recorded for later.
 
 | # | Task | Effort | Payoff |
 |---|------|--------|--------|

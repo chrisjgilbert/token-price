@@ -1,11 +1,10 @@
 module OpenRouter
-  # Presents a ModelSync::Result two ways: the Slack Block Kit payload for the
-  # team's #token-price channel, and the public social launch posts (which also
-  # look up each launched model's description to read like news).
+  # Presents a ModelSync::Result as the Slack Block Kit payload for the team's
+  # #token-price channel — an internal roundup of what the sync repriced and
+  # imported, so the new rows can be curated.
   #
-  #   digest = OpenRouter::SyncDigest.new(result)
-  #   payload = digest.to_slack_payload   # => Hash or nil (nothing changed)
-  #   digest.launch_posts                 # => Array<String>
+  #   payload = OpenRouter::SyncDigest.new(result).to_slack_payload
+  #   # => Hash, or nil when nothing changed
   class SyncDigest
     BASE_URL = "https://tokenprice.fyi"
 
@@ -16,14 +15,6 @@ module OpenRouter
     # last chunk), so neither push a block past the cap.
     LINE_PACK_LIMIT = 2700
     MAX_BLOCKS       = 50
-
-    # An OpenRouter import carries no signal for whether a launch is notable or
-    # long tail, so the curated provider set is the gate for the social posts.
-    # Display names match the seeded major providers.
-    ANNOUNCEABLE_PROVIDERS = Set[
-      "Anthropic", "OpenAI", "Google", "xAI", "DeepSeek",
-      "Meta", "Mistral", "Cohere", "Alibaba", "Moonshot AI"
-    ].freeze
 
     def initialize(result, date: Date.current)
       @result = result
@@ -47,43 +38,7 @@ module OpenRouter
       { text: "Token Price sync — #{@date.strftime('%-d %b %Y')}", blocks: blocks }
     end
 
-    # Below this, drop the description rather than post a stub fragment.
-    MIN_BLURB_CHARS = 20
-
-    # Social-post strings for the sync's new launches, one per announceable model.
-    # Each carries the model's one-line description (the sync writes one on import)
-    # so the post reads like news rather than a bare price line.
-    def launch_posts
-      records = @result.created_records
-        .select { |r| ANNOUNCEABLE_PROVIDERS.include?(r.provider_name) }
-      blurbs = AiModel.where(slug: records.map(&:model_slug)).pluck(:slug, :description).to_h
-      records.map { |r| launch_post(r, blurbs[r.model_slug]) }
-    end
-
-    # Total new models this run, announceable or not — lets the caller log how
-    # many launches were filtered below the provider bar.
-    def created_count = @result.created_records.size
-
     private
-
-    def launch_post(record, description)
-      headline = "New model: #{record.model_name} (#{record.provider_name}) — " \
-                 "$#{fmt(record.input_per_mtok)}/M in, $#{fmt(record.output_per_mtok)}/M out."
-      link = "#{BASE_URL}/models/#{record.model_slug}"
-      # Two blank-line separators (4 chars) join the up-to-three parts.
-      budget = SocialBroadcast::CHAR_LIMIT - headline.length - link.length - 4
-      [ headline, fit_blurb(description, budget), link ].compact.join("\n\n")
-    end
-
-    # The description, squished onto one line (a multi-line upstream blurb would
-    # break the paragraph structure) and trimmed to the budget left after the
-    # headline and link — dropped entirely when there's too little room.
-    def fit_blurb(description, budget)
-      blurb = description.to_s.squish.presence
-      return if blurb.nil? || budget < MIN_BLURB_CHARS
-
-      blurb.truncate(budget, omission: "…")
-    end
 
     def header_block
       { type: "header",
