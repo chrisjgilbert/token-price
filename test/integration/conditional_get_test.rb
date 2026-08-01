@@ -153,8 +153,12 @@ class ConditionalGetTest < ActionDispatch::IntegrationTest
     get events_url
     etag = response.headers["ETag"]
 
-    MarketEvent.create!(title: "First published event", event_date: Date.current,
-                        kind: "market", status: "published")
+    event = MarketEvent.create!(title: "First published event", event_date: Date.current,
+                                kind: "market", status: "published")
+    # The stamp reaches the etag through Array#to_s, which renders a Time to the
+    # second — so an event created in the same second as the fixtures' newest
+    # row leaves the key unchanged. Stamp it forward rather than race the clock.
+    event.update_column(:updated_at, 1.minute.from_now)
 
     get events_url, headers: { "If-None-Match" => etag }
     assert_response :success
