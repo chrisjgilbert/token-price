@@ -11,12 +11,15 @@ class EventsController < ApplicationController
     # shared cache can't hand one representation to a request that wants the other.
     response.headers["Vary"] = [ response.headers["Vary"], "Accept" ].compact.join(", ")
 
-    # Market events are the only thing this page reads, so its freshness is
-    # theirs alone. The page varies by page number and response format (a full
-    # HTML page vs. a Turbo Stream append), so both ride the etag — otherwise
-    # one view would 304 off the other's cache.
+    # Freshness spans more than the timeline's own rows: the shared layout
+    # footer counts models and providers, so a MarketEvent-only stamp would
+    # serve a stale count after an import — and would be nil entirely on an
+    # empty table, leaving the static etag to 304 forever. The page varies by
+    # page number and response format (a full HTML page vs. a Turbo Stream
+    # append), so both ride the etag — otherwise one view would 304 off the
+    # other's cache.
     return if catalog_fresh?(etag: [ :events, @page, request.format.symbol ],
-      last_modified: MarketEvent.maximum(:updated_at))
+      last_modified: helpers.timeline_last_modified)
 
     published = MarketEvent.published
     total = published.count

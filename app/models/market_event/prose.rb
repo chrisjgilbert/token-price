@@ -7,7 +7,11 @@ module MarketEvent::Prose
   # character cut ends a sentence mid-word ("by a real marg…"), which reads as
   # broken rather than abbreviated.
   def self.fit(text, limit:)
-    text = text.to_s.strip
+    # Squished first because the sentence scan can't cross a newline: a blurb
+    # whose opening line has no terminator would otherwise match no sentence and
+    # be dropped from the front. Nothing is lost — the events page renders this
+    # in a single <p> and a social post reads better on one line either way.
+    text = text.to_s.squish
     return text if text.length <= limit
 
     kept = +""

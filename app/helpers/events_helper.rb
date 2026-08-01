@@ -10,10 +10,12 @@ module EventsHelper
       .map { |year, group| [ year, group.sort_by { |e| [ e.event_date, e.title ] }.reverse ] }
   end
 
-  # Freshness timestamp for the homepage, used as its Last-Modified for
-  # conditional GET. It spans the price catalog and the model and provider rows
-  # the price table renders, plus the market events in the hero card — so an
-  # admin edit to any of them revalidates instead of serving a stale 304.
+  # Freshness timestamp for the homepage and the events timeline, used as the
+  # Last-Modified for conditional GET on both. It spans the price catalog, the
+  # market events those pages render, and the model and provider rows behind the
+  # price table and the shared footer's counts — so an admin edit to any of them
+  # revalidates instead of serving a stale 304. Shared by the two pages so their
+  # freshness can't drift apart.
   # A few indexed MAX() aggregates over small tables; no rows are loaded.
   def timeline_last_modified
     [

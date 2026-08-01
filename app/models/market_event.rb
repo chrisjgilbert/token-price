@@ -14,10 +14,12 @@ class MarketEvent < ApplicationRecord
                          allow_blank: true
 
   scope :chronological, -> { order(event_date: :asc) }
-  # Title breaks a same-date tie so the order is total, not DB-dependent: the
+  # Ordered down to the primary key so the sort is total, not DB-dependent: the
   # events timeline paginates on this, and an unstable tie could show the same
-  # event on two pages or skip it entirely. Matches EventsHelper#events_by_year.
-  scope :recent_first,  -> { order(event_date: :desc, title: :desc) }
+  # event on two pages or skip it entirely. Neither event_date nor title is
+  # unique, so id is what actually guarantees it; title comes first so the order
+  # still matches how EventsHelper#events_by_year sorts each year's group.
+  scope :recent_first,  -> { order(event_date: :desc, title: :desc, id: :desc) }
   scope :published,     -> { where(status: "published") }
   scope :drafts,        -> { where(status: "draft") }
 end

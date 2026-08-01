@@ -101,6 +101,24 @@ class EventsControllerTest < ActionDispatch::IntegrationTest
       "page two (HTML) should include page one's events plus the next batch"
   end
 
+  test "paging is stable across a block of events sharing a date and a title" do
+    # Neither event_date nor title is unique, so id is what makes the sort
+    # total. Without it an unstable tie could show an event on both pages or on
+    # neither. Every event here shares one date AND one title.
+    (PER_PAGE + 5).times do
+      MarketEvent.create!(title: "Same-day event", event_date: Date.current,
+                          kind: "market", status: "published")
+    end
+
+    get events_url
+    page_one_ids = css_select(".ev-item").size
+    get events_url(page: 2), as: :turbo_stream
+    page_two_ids = css_select(".ev-item").size
+
+    assert_equal PER_PAGE, page_one_ids
+    assert_equal 5, page_two_ids, "every event should appear exactly once across the two pages"
+  end
+
   test "paging is stable across a block of same-date events" do
     # A date tie with no secondary sort key is DB-dependent, which could show an
     # event on both pages or on neither. Every event here shares one date.

@@ -113,11 +113,39 @@ class ConditionalGetTest < ActionDispatch::IntegrationTest
   end
 
   test "events supports conditional GET" do
-    # Last-Modified is the newest market event's updated_at, so the page needs
-    # at least one — there is no market_events fixture file.
     MarketEvent.create!(title: "A market event", event_date: Date.current,
                         kind: "market", status: "published")
 
     assert_not_modified_on_replay(events_url)
+  end
+
+  test "events still carries a Last-Modified with no market events yet" do
+    # Without one the etag is fully static, so a client that cached the empty
+    # timeline would 304 forever once events are published.
+    MarketEvent.delete_all
+
+    get events_url
+    assert_response :success
+    assert response.headers["Last-Modified"].present?,
+      "expected a Last-Modified even when the timeline is empty"
+  end
+
+  test "events revalidates for an If-Modified-Since client when a model changes" do
+    # /events renders the shared layout footer, which counts models and
+    # providers — so its freshness has to span them, not just market events.
+    # Only If-Modified-Since is sent: with config.load_defaults 8.1,
+    # strict_freshness means an If-None-Match would be the sole validator and
+    # this page's etag carries no data (true of every page here, not just this
+    # one), so that header is what exercises last_modified at all.
+    MarketEvent.create!(title: "A market event", event_date: Date.current,
+                        kind: "market", status: "published")
+    _etag, last_mod = assert_not_modified_on_replay(events_url)
+
+    # A plain touch can land in the same second as the request above, and
+    # Last-Modified only has second granularity — so stamp it unambiguously.
+    ai_models(:opus).update_column(:updated_at, 1.minute.from_now)
+
+    get events_url, headers: { "If-Modified-Since" => last_mod }
+    assert_response :success, "a model edit must bust /events — the footer renders AiModel.listed.count"
   end
 end
