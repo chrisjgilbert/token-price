@@ -130,22 +130,34 @@ class ConditionalGetTest < ActionDispatch::IntegrationTest
       "expected a Last-Modified even when the timeline is empty"
   end
 
-  test "events revalidates for an If-Modified-Since client when a model changes" do
-    # /events renders the shared layout footer, which counts models and
-    # providers — so its freshness has to span them, not just market events.
-    # Only If-Modified-Since is sent: with config.load_defaults 8.1,
-    # strict_freshness means an If-None-Match would be the sole validator and
-    # this page's etag carries no data (true of every page here, not just this
-    # one), so that header is what exercises last_modified at all.
+  test "events revalidates when a model changes — the shared footer counts them" do
     MarketEvent.create!(title: "A market event", event_date: Date.current,
                         kind: "market", status: "published")
-    _etag, last_mod = assert_not_modified_on_replay(events_url)
+    etag, last_mod = assert_not_modified_on_replay(events_url)
 
     # A plain touch can land in the same second as the request above, and
     # Last-Modified only has second granularity — so stamp it unambiguously.
     ai_models(:opus).update_column(:updated_at, 1.minute.from_now)
 
-    get events_url, headers: { "If-Modified-Since" => last_mod }
+    get events_url, headers: { "If-None-Match" => etag, "If-Modified-Since" => last_mod }
     assert_response :success, "a model edit must bust /events — the footer renders AiModel.listed.count"
+  end
+
+  test "events revalidates on an If-None-Match alone once an event is published" do
+    # strict_freshness (config.load_defaults 8.1) makes the etag the sole
+    # validator when If-None-Match is sent, so the freshness stamp has to be in
+    # the etag key. Without it a client that cached the empty timeline — a real
+    # browser walking the site, as the system tests do — never sees a new event.
+    MarketEvent.delete_all
+
+    get events_url
+    etag = response.headers["ETag"]
+
+    MarketEvent.create!(title: "First published event", event_date: Date.current,
+                        kind: "market", status: "published")
+
+    get events_url, headers: { "If-None-Match" => etag }
+    assert_response :success
+    assert_select ".ev-title", text: /First published event/
   end
 end
