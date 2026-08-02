@@ -164,4 +164,50 @@ class ConditionalGetTest < ActionDispatch::IntegrationTest
     assert_response :success
     assert_select ".ev-title", text: /First published event/
   end
+
+  # Every page here keys its etag on request params — category, sort, slug — and
+  # none of them carry data. With strict_freshness (config.load_defaults 8.1) a
+  # request carrying If-None-Match is validated on the etag ALONE, so before
+  # catalog_fresh? folded the freshness stamp in, a browser would 304 off its
+  # cached copy indefinitely no matter how far the catalog had moved on.
+  CACHED_PAGES = {
+    "models#index"    => -> { root_url },
+    "models#show"     => -> { model_url(ai_models(:opus)) },
+    "providers#show"  => -> { provider_url(providers(:anthropic)) },
+    "price_changes"   => -> { price_changes_url },
+    "how_pricing_works" => -> { how_pricing_works_url },
+    "learn#reasoning" => -> { learn_reasoning_url },
+    "events"          => -> { events_url }
+  }.freeze
+
+  test "a catalog write revalidates every conditional-GET page on an If-None-Match alone" do
+    etags = CACHED_PAGES.transform_values do |url|
+      get instance_exec(&url)
+      assert_response :success
+      response.headers["ETag"]
+    end
+
+    # A price-row write is what PriceCatalog.last_modified tracks, and it feeds
+    # every page's stamp. Stamped forward because the etag renders the Time to
+    # the second — a same-second touch would leave the key unchanged.
+    price_points(:opus_launch).update_column(:updated_at, 1.minute.from_now)
+
+    CACHED_PAGES.each do |name, url|
+      get instance_exec(&url), headers: { "If-None-Match" => etags[name] }
+      assert_response :success, "#{name} must revalidate after a catalog write, not 304 off a stale etag"
+    end
+  end
+
+  test "each cached page still 304s when nothing has changed" do
+    # The other half of the contract: folding data into the etag must not make
+    # every request a miss, or conditional GET stops buying anything.
+    CACHED_PAGES.each do |name, url|
+      resolved = instance_exec(&url)
+      get resolved
+      assert_response :success
+
+      get resolved, headers: { "If-None-Match" => response.headers["ETag"] }
+      assert_response :not_modified, "#{name} should still 304 when the catalog is unchanged"
+    end
+  end
 end

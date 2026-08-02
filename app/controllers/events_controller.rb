@@ -14,16 +14,12 @@ class EventsController < ApplicationController
     # Freshness spans more than the timeline's own rows: the shared layout footer
     # counts models and providers, so a MarketEvent-only stamp would serve a
     # stale count after an import.
-    last_modified = helpers.timeline_last_modified
-
-    # The stamp rides in the etag as well as the header. Under strict_freshness
-    # (config.load_defaults 8.1) an If-None-Match makes the etag the *sole*
-    # validator and Last-Modified is ignored, so a key built only from the
-    # request's shape would keep serving a cached empty timeline after the first
-    # events are published. Page number and format ride it too — otherwise the
-    # full HTML page and the Turbo Stream append would 304 off each other.
-    return if catalog_fresh?(etag: [ :events, @page, request.format.symbol, last_modified ],
-      last_modified: last_modified)
+    #
+    # Page number and format ride the etag — otherwise the full HTML page and the
+    # Turbo Stream append would 304 off each other. catalog_fresh? folds the
+    # freshness stamp in on top.
+    return if catalog_fresh?(etag: [ :events, @page, request.format.symbol ],
+      last_modified: helpers.timeline_last_modified)
 
     published = MarketEvent.published
     total = published.count
