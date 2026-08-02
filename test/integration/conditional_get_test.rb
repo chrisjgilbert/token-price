@@ -210,4 +210,42 @@ class ConditionalGetTest < ActionDispatch::IntegrationTest
       assert_response :not_modified, "#{name} should still 304 when the catalog is unchanged"
     end
   end
+
+  test "a provider write revalidates every page — the shared footer counts them" do
+    # Most pages key last_modified on PriceCatalog.last_modified, which is
+    # PricePoint.maximum(:updated_at) — a provider or model row write doesn't
+    # move it. The footer counts both on every page, so the etag has to.
+    etags = CACHED_PAGES.transform_values do |url|
+      get instance_exec(&url)
+      assert_response :success
+      response.headers["ETag"]
+    end
+
+    # Stamped forward because the etag renders a Time to the second: a provider
+    # created in the same second as the fixtures leaves the key unchanged.
+    Provider.create!(name: "Probe", slug: "probe").update_column(:updated_at, 1.minute.from_now)
+
+    CACHED_PAGES.each do |name, url|
+      get instance_exec(&url), headers: { "If-None-Match" => etags[name] }
+      assert_response :success, "#{name} must revalidate after a provider write — its footer counts providers"
+    end
+  end
+
+  test "every page revalidates across a day rollover" do
+    # The layout stamps "prices synced <Date.current>" on every page, and
+    # /changes renders a rolling 30-day window. Both move on the clock, not on a
+    # write, so a quiet catalog would otherwise 304 a stale date indefinitely.
+    etags = CACHED_PAGES.transform_values do |url|
+      get instance_exec(&url)
+      assert_response :success
+      response.headers["ETag"]
+    end
+
+    travel 1.day do
+      CACHED_PAGES.each do |name, url|
+        get instance_exec(&url), headers: { "If-None-Match" => etags[name] }
+        assert_response :success, "#{name} must revalidate once the date it prints has changed"
+      end
+    end
+  end
 end
